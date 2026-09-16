@@ -1,0 +1,60 @@
+# After changing server/ or web/, rebuild + restart:
+#   docker compose build --no-cache check-gcp-logger && docker compose up -d --force-recreate
+# Or one-liner:
+#   docker compose up -d --build --force-recreate
+
+services:
+  check-gcp-logger:
+    build: .
+    image: check-gcp-logger:latest
+    container_name: check-gcp-logger
+    ports:
+      - "4000:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_REGION=${GCP_REGION}
+      - MAX_LOG_ENTRIES_PER_QUERY=${MAX_LOG_ENTRIES_PER_QUERY:-500}
+      - FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID:-ga4-analytics-db-dev}
+      # Point google-auth-library at the ADC file mounted from the host below.
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/application_default_credentials.json
+    volumes:
+      # ADC credentials from the host.
+      #
+      # Windows (Git Bash / PowerShell): the file lives at
+      #   %APPDATA%\gcloud\application_default_credentials.json
+      # which Docker Desktop sees as:
+      #   ${APPDATA}/gcloud/application_default_credentials.json
+      # macOS / Linux: it lives at ${HOME}/.config/gcloud/...
+      #
+      # Set GCLOUD_ADC_FILE in .env if your path differs.
+      - ${GCLOUD_ADC_FILE:-${APPDATA:-${HOME}/.config}/gcloud/application_default_credentials.json}:/secrets/application_default_credentials.json:ro
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: check-gcp-logger-ngrok
+    depends_on:
+      - check-gcp-logger
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command: http check-gcp-logger:4000 --log=stdout
+    ports:
+      - "4041:4040"   # ngrok dashboard at http://localhost:4041 (4040 taken by line-tester-ngrok)
+    restart: unless-stopped
+    profiles: ["ngrok"]   # only starts when explicitly requested
+
+  # Cloudflare quick-tunnel — no account, no request quota. URL prints in logs:
+  #   docker compose logs cloudflared
+  # Look for a line like:  https://<random>.trycloudflare.com
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: check-gcp-logger-cloudflared
+    depends_on:
+      - check-gcp-logger
+    command: tunnel --no-autoupdate --url http://check-gcp-logger:4000
+    restart: unless-stopped

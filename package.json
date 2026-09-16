@@ -1,0 +1,22 @@
+{
+  "name": "check-gcp-logger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local desktop app for browsing GCP Cloud Functions logs with per-function multi-select and detail expansion.",
+  "scripts": {
+    "install:all": "npm install && npm --prefix server install && npm --prefix web install",
+    "dev": "concurrently -n server,web -c blue,magenta \"npm --prefix server run dev\" \"npm --prefix web run dev\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix server run start",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build --force-recreate",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:rebuild": "docker compose build --no-cache check-gcp-logger && docker compose up -d --force-recreate"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
